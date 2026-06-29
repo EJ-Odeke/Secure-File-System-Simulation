@@ -1,0 +1,15 @@
+{
+  "odeke": {
+    "owner": "odeke21",
+    "plaintext": "hello elijah this is a trial code play with it i hope u get it",
+    "chunks": [
+      "odeke.bin"
+    ],
+    "security": {
+      "key": "fd648310bdac272457c0e570ad2822d8",
+      "iv": "6c4b83811a5885e282edecf7031dff0d",
+      "hmac": "660659411d44f96e70cd0cf00c3c334af5b87fb867ce4e58988f5ca3200cf85b"
+    },
+    "locked": false
+  }
+}
