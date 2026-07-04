@@ -1,4 +1,4 @@
-# Secure File System Simulation
+||# Secure File System Simulation
 
 ## Overview
 The **Secure File System Simulation** is a Python-based project designed to demonstrate core principles of cybersecurity and secure data management. It simulates how a protected file system would operate by incorporating authentication, encryption, access control, and file integrity validation.
@@ -74,7 +74,7 @@ Add GUI interface (Tkinter or Web UI)
 Logging & audit trails for all file operations
 
 Author
-Elijah Odeke
+Odeke Elijah Faith
 
 License
 This project is for educational purposes and does not include a formal license yet.
