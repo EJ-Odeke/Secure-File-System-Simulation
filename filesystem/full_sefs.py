@@ -11,9 +11,9 @@ CHUNK_DIR = "storage/chunks/"
 DB_FILE = "storage/files.json"
 
 
-# =========================================================
+
 # INIT
-# =========================================================
+
 def init():
     os.makedirs(CHUNK_DIR, exist_ok=True)
 
@@ -22,9 +22,9 @@ def init():
             json.dump({}, f)
 
 
-# =========================================================
-# DB HELPERS
-# =========================================================
+
+# DB storage
+
 def load_db():
     if not os.path.exists(DB_FILE):
         return {}
@@ -40,9 +40,7 @@ def save_db(db):
         json.dump(db, f, indent=2)
 
 
-# =========================================================
-# CREATE FILE
-# =========================================================
+# Create file
 def create_file(u, p, filename, content=""):
     init()
     db = load_db()
@@ -62,9 +60,7 @@ def create_file(u, p, filename, content=""):
     return 1
 
 
-# =========================================================
-# WRITE FILE
-# =========================================================
+# writting file
 def write_to_file(u, p, filename, position, content):
     db = load_db()
 
@@ -76,9 +72,8 @@ def write_to_file(u, p, filename, position, content):
     return 1
 
 
-# =========================================================
 # ENCRYPT FILE
-# =========================================================
+
 def encrypt_file(u, p, filename):
     init()
     db = load_db()
@@ -124,13 +119,12 @@ def encrypt_file(u, p, filename):
     }
 
 
-# =========================================================
-# INTERNAL DECRYPT (SAFE)
-# =========================================================
+# DECRYPT 
+
 def _decrypt_internal(filename):
     db = load_db()
 
-    # 🔒 SAFE CHECK
+    
     if not db[filename].get("chunks"):
         return -1
 
@@ -155,16 +149,14 @@ def _decrypt_internal(filename):
     return decrypt(encrypted, key, iv).decode(errors="ignore")
 
 
-# =========================================================
-# READ FILE (FIXED CRASH HERE)
-# =========================================================
+# READ FILE 
 def read_from_file(u, p, filename, position=0, length=None):
     db = load_db()
 
     if filename not in db:
         return -1
 
-    # 🔥 FIX: prevent IndexError
+
     if not db[filename].get("chunks"):
         return "ERROR: FILE NOT ENCRYPTED YET"
 
@@ -183,9 +175,8 @@ def read_from_file(u, p, filename, position=0, length=None):
     return _decrypt_internal(filename)
 
 
-# =========================================================
 # DECRYPT WITH KEY + IV
-# =========================================================
+
 def decrypt_file_with_prompt(u, p, filename, input_key, input_iv):
     db = load_db()
 
@@ -208,9 +199,8 @@ def decrypt_file_with_prompt(u, p, filename, input_key, input_iv):
     return text
 
 
-# =========================================================
 # FILE SIZE
-# =========================================================
+
 def file_size(u, p, filename):
     db = load_db()
 
@@ -220,17 +210,15 @@ def file_size(u, p, filename):
     return len(db[filename]["plaintext"])
 
 
-# =========================================================
 # LIST FILES
-# =========================================================
+
 def list_files():
     db = load_db()
     return list(db.keys())
 
 
-# =========================================================
 # DELETE FILE
-# =========================================================
+
 def delete_file(u, p, filename):
     db = load_db()
 
@@ -247,10 +235,8 @@ def delete_file(u, p, filename):
 
     return 1
 
-
-# =========================================================
 # INTEGRITY CHECK
-# =========================================================
+
 def file_integrity_check(u, p, filename):
     db = load_db()
 
@@ -275,9 +261,7 @@ def file_integrity_check(u, p, filename):
     return 1 if mac == sec["hmac"] else -1
 
 
-# =========================================================
 # SYSTEM HEALTH
-# =========================================================
 def system_health_check():
     db = load_db()
     return json.dumps(db, indent=2)
