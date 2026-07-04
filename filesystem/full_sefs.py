@@ -16,6 +16,7 @@ DB_FILE = "storage/files.json"
 # =========================================================
 def init():
     os.makedirs(CHUNK_DIR, exist_ok=True)
+
     if not os.path.exists(DB_FILE):
         with open(DB_FILE, "w") as f:
             json.dump({}, f)
@@ -27,6 +28,7 @@ def init():
 def load_db():
     if not os.path.exists(DB_FILE):
         return {}
+
     try:
         return json.load(open(DB_FILE))
     except:
@@ -75,7 +77,7 @@ def write_to_file(u, p, filename, position, content):
 
 
 # =========================================================
-# ENCRYPT FILE (STORE KEY + IV EXPLICITLY)
+# ENCRYPT FILE
 # =========================================================
 def encrypt_file(u, p, filename):
     init()
@@ -85,14 +87,12 @@ def encrypt_file(u, p, filename):
         return -1
 
     text = db[filename]["plaintext"]
+
     if not text:
         return -1
 
     data = text.encode()
 
-    # =====================================================
-    # KEY + IV GENERATION
-    # =====================================================
     key = secrets.token_bytes(16)
     iv = secrets.token_bytes(16)
 
@@ -106,9 +106,6 @@ def encrypt_file(u, p, filename):
 
     mac = hmac.new(key, encrypted, hashlib.sha256).hexdigest()
 
-    # =====================================================
-    # STORE EVERYTHING (KEY + IV INCLUDED)
-    # =====================================================
     db[filename]["chunks"] = [cname]
     db[filename]["security"] = {
         "key": key.hex(),
@@ -120,7 +117,6 @@ def encrypt_file(u, p, filename):
 
     save_db(db)
 
-    # ✔ IMPORTANT: return key + iv for assignment demo
     return {
         "status": "ENCRYPTED",
         "key": key.hex(),
@@ -129,13 +125,20 @@ def encrypt_file(u, p, filename):
 
 
 # =========================================================
-# INTERNAL DECRYPT
+# INTERNAL DECRYPT (SAFE)
 # =========================================================
 def _decrypt_internal(filename):
     db = load_db()
 
+    # 🔒 SAFE CHECK
+    if not db[filename].get("chunks"):
+        return -1
+
     cname = db[filename]["chunks"][0]
     path = CHUNK_DIR + cname
+
+    if not os.path.exists(path):
+        return -1
 
     encrypted = open(path, "rb").read()
 
@@ -153,7 +156,7 @@ def _decrypt_internal(filename):
 
 
 # =========================================================
-# READ FILE
+# READ FILE (FIXED CRASH HERE)
 # =========================================================
 def read_from_file(u, p, filename, position=0, length=None):
     db = load_db()
@@ -161,19 +164,27 @@ def read_from_file(u, p, filename, position=0, length=None):
     if filename not in db:
         return -1
 
+    # 🔥 FIX: prevent IndexError
+    if not db[filename].get("chunks"):
+        return "ERROR: FILE NOT ENCRYPTED YET"
+
     cname = db[filename]["chunks"][0]
     path = CHUNK_DIR + cname
+
+    if not os.path.exists(path):
+        return "ERROR: FILE MISSING ON DISK"
 
     encrypted = open(path, "rb").read()
 
     if db[filename].get("locked", False):
-        return base64.b64encode(encrypted).decode()[:200] + " ... [ENCRYPTED]"
+        preview = base64.b64encode(encrypted).decode()
+        return preview[:200] + " ... [ENCRYPTED]"
 
     return _decrypt_internal(filename)
 
 
 # =========================================================
-# DECRYPT WITH KEY + IV (VALIDATION IN MAIN)
+# DECRYPT WITH KEY + IV
 # =========================================================
 def decrypt_file_with_prompt(u, p, filename, input_key, input_iv):
     db = load_db()
@@ -202,8 +213,10 @@ def decrypt_file_with_prompt(u, p, filename, input_key, input_iv):
 # =========================================================
 def file_size(u, p, filename):
     db = load_db()
+
     if filename not in db:
         return -1
+
     return len(db[filename]["plaintext"])
 
 
@@ -244,8 +257,14 @@ def file_integrity_check(u, p, filename):
     if filename not in db:
         return -1
 
+    if not db[filename].get("chunks"):
+        return -1
+
     cname = db[filename]["chunks"][0]
     path = CHUNK_DIR + cname
+
+    if not os.path.exists(path):
+        return -1
 
     encrypted = open(path, "rb").read()
     sec = db[filename]["security"]

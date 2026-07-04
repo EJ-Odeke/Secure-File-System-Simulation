@@ -1,15 +1,28 @@
 {
-  "odeke": {
+  "test1": {
     "owner": "odeke21",
-    "plaintext": "hello elijah this is a trial code play with it i hope u get it",
+    "plaintext": "this is a test file",
     "chunks": [
-      "odeke.bin"
+      "test1.bin"
     ],
     "security": {
-      "key": "fd648310bdac272457c0e570ad2822d8",
-      "iv": "6c4b83811a5885e282edecf7031dff0d",
-      "hmac": "660659411d44f96e70cd0cf00c3c334af5b87fb867ce4e58988f5ca3200cf85b"
+      "key": "d97fa7ef6a928e97ef4d95b79927dcef",
+      "iv": "9ded1d2cfa35c7c101d813662c3731a4",
+      "hmac": "e7f1bd2f42ce7a33ab42a5bc2622eab79935c0b5659e4416c3e31c0a3af1be87"
     },
     "locked": false
+  },
+  "long": {
+    "owner": "odeke21",
+    "plaintext": "A wonderful serenity has taken possession of my entire soul, like these sweet mornings of spring which I enjoy with my whole heart. I am alone, and feel the charm of existence in this spot, which was created for the bliss of souls like mine. I am so happy, my dear friend, so absorbed in the exquisite sense of mere tranquil existence, that I neglect my talents. I should be incapable of drawing a single stroke at the present moment; and yet I feel that I never was a greater artist than now. When, while the lovely valley teems with vapour around me, and the meridian sun strikes the upper surface of the impenetrable foliage of my trees, and but a few stray gleams steal into the inner sanctuary, I throw myself down among the tall grass by the trickling stream; and, as I lie close to the earth, a thousand unknown plants are noticed by me: when I hear the buzz of the little world among the stalks, and grow familiar with the countless indescribable forms of the insects",
+    "chunks": [
+      "long.bin"
+    ],
+    "security": {
+      "key": "2387f1dc3d82998f0696571b62c6da77",
+      "iv": "3c1cb8b5b7ba31bb1d8a8fbe13f0dbbb",
+      "hmac": "89b855a17ae4ac28d8f740931cc163ea74c9d77fefc4f50250d1a2ccd7fa305f"
+    },
+    "locked": true
   }
 }

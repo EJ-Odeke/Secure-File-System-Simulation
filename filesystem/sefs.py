@@ -1,12 +1,4 @@
-"""
-==========================================================
-File: sefs.py
 
-Purpose:
---------
-Simplified Encrypted File System (SEFS)
-==========================================================
-"""
 
 import os
 from crypto.crypto_utils import generate_key, generate_iv, encrypt, decrypt

@@ -1,11 +1,11 @@
-import os
-import hashlib
-import binascii
-import secrets
+import os # used to check if password file exists
+import hashlib # cryptographic hashing (PBKDF2)
+import binascii # for converting binary hash to readable string
+import secrets # generating secure random salt
 import auth.validator as validator
 
 
-def load_users(pfile):
+def load_users(pfile): # Read stored user credentials from file.
     users = {}
 
     if not os.path.exists(pfile):
@@ -26,24 +26,27 @@ def load_users(pfile):
     return users
 
 
-def save_users(users, pfile):
+def save_users(users, pfile): # Writes dictionary back to file.
     with open(pfile, "w") as f:
         for u, (salt, h) in users.items():
             f.write(f"{u}:{salt}:{h}\n")
 
 
 def hash_password(password, salt):
+
+    # use PBKDF2 (Password-Based Key Derivation Function 2)
     dk = hashlib.pbkdf2_hmac(
         "sha1",
         password.encode(),
         salt.encode(),
         20000
     )
+    # Binary - hex string for storage
     return binascii.hexlify(dk).decode()
 
 
 def register_user(u, p, pfile):
-
+    # checks format rules (length, characters)
     if not validator.is_valid_username(u):
         return -1
 
@@ -54,7 +57,8 @@ def register_user(u, p, pfile):
 
     if u in users:
         return -1
-
+    # creates random 64-character hex string
+    # unique per user - 32 bytes = 256 bits of randomness
     salt = secrets.token_hex(32)
     users[u] = (salt, hash_password(p, salt))
 

@@ -12,13 +12,12 @@ from filesystem.full_sefs import (
     system_health_check
 )
 
-PFILE = "database/passwd"
-current_user = None
+PFILE = "database/passwd" # is where user credentials are stored
+current_user = None # tracks logged in user session
 
 
-# =========================================================
-# AUTH MENU
-# =========================================================
+# display menu
+
 def auth_menu():
     print("\n1. Sign Up")
     print("2. Login")
@@ -26,19 +25,18 @@ def auth_menu():
     return input("Choose: ")
 
 
-# =========================================================
-# SIGNUP
-# =========================================================
+
+## singup -paged- this code hANDLES signups
+
 def signup():
     u = input("Username: ")
     p = input("Password: ")
-
+    # username + password stored in file (database/passwd)
     print("✔" if register_user(u, p, PFILE) == 1 else "✖")
 
 
-# =========================================================
+
 # LOGIN
-# =========================================================
 def login():
     global current_user
 
@@ -54,15 +52,16 @@ def login():
     return False
 
 
-# =========================================================
-# FILE MENU
-# =========================================================
-def file_menu():
-    print("\n===== SEFS MENU =====")
+
+# File management menu or main dashboard after login
+
+def file_menu(): # this is the core engine of this App
+    print("\n===== Secure File System Simulation MENU =====")
     print("1. Create File")
     print("2. Encrypt File")
     print("3. Decrypt File (Key + IV)")
     print("4. Read File")
+    # write not yet activated
     print("5. List Files")
     print("6. Delete File")
     print("7. File Size")
@@ -72,9 +71,9 @@ def file_menu():
     return input("Choose: ")
 
 
-# =========================================================
-# FILE SYSTEM
-# =========================================================
+
+# File system script
+
 def file_system():
     global current_user
 
@@ -102,31 +101,31 @@ def file_system():
             print(read_from_file(current_user, None, n))
 
         elif choice == "5":
-            print(list_files())
+            print(list_files()) # shows all files belonging to user --still making sure it appears to only current user
 
         elif choice == "6":
             n = input("File name: ")
-            print(delete_file(current_user, None, n))
+            print(delete_file(current_user, None, n)) # removes file permanently
 
         elif choice == "7":
             n = input("File name: ")
-            print(file_size(current_user, None, n))
+            print(file_size(current_user, None, n)) # returns file size in bytes
 
         elif choice == "8":
             n = input("File name: ")
-            print(file_integrity_check(current_user, None, n))
+            print(file_integrity_check(current_user, None, n)) # checks hash (SHA256 / HMAC)
 
         elif choice == "9":
-            print(system_health_check())
+            print(system_health_check()) # system status logs
 
         elif choice == "10":
             current_user = None
             break
 
 
-# =========================================================
-# MAIN LOOP
-# =========================================================
+
+# looper --
+
 def main():
 
     while True:
