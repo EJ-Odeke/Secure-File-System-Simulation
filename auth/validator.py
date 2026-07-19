@@ -1,22 +1,38 @@
-import re # Regular Expressions module
+import re
 
-#Is this username acceptable?
-def is_valid_username(username):
+
+def validate_username(username):
+    """
+    SEFS username requirements:
+    - Allowed characters: a-zA-Z0-9
+    - Length >= 6 and < 32
+    """
+
     if not isinstance(username, str):
         return False
-#prevents weak/too short usernames and overly long inputs
+
     if len(username) < 6 or len(username) >= 32:
         return False
 
-    return re.fullmatch(r'^[A-Za-z0-9]+$', username) is not None
+    pattern = r"^[a-zA-Z0-9]+$"
+
+    return re.match(pattern, username) is not None
 
 
-# Is this password strong enough and safe?
-def is_valid_password(password):
+def validate_password(password):
+    """
+    SEFS password requirements:
+    - Allowed characters:
+      a-zA-Z0-9@#$%&*()-+=
+    - Length >= 9 and < 32
+    """
+
     if not isinstance(password, str):
         return False
 
     if len(password) < 9 or len(password) >= 32:
         return False
 
-    return re.fullmatch(r'^[A-Za-z0-9@#$%&*()\-+=]+$', password) is not None
+    pattern = r"^[a-zA-Z0-9@#$%&*()\-\+=]+$"
+
+    return re.match(pattern, password) is not None

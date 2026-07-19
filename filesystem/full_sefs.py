@@ -1,267 +1,1037 @@
 import os
 import json
-import hashlib
-import hmac
-import secrets
-import base64
+import pickle
+import random
+import string
 
-from crypto.crypto_utils import encrypt, decrypt
+from auth.auth import match_user
 
-CHUNK_DIR = "storage/chunks/"
-DB_FILE = "storage/files.json"
-
-
-
-# INIT
-
-def init():
-    os.makedirs(CHUNK_DIR, exist_ok=True)
-
-    if not os.path.exists(DB_FILE):
-        with open(DB_FILE, "w") as f:
-            json.dump({}, f)
+from crypto.crypto_utils import (
+    generate_key,
+    generate_iv,
+    encrypt_aes_ctr,
+    decrypt_aes_ctr,
+    generate_hmac,
+    verify_hmac,
+    sha256_file
+)
 
 
+# =====================================================
+# CONFIGURATION
+# =====================================================
 
-# DB storage
+CHUNK_SIZE = 1024
 
-def load_db():
-    if not os.path.exists(DB_FILE):
-        return {}
+STORAGE_DIR = "storage/full"
 
-    try:
-        return json.load(open(DB_FILE))
-    except:
-        return {}
+META_DIR = os.path.join(
+    STORAGE_DIR,
+    "meta"
+)
+
+CHUNK_DIR = os.path.join(
+    STORAGE_DIR,
+    "chunks"
+)
+
+MASTER_LIST = os.path.join(
+    STORAGE_DIR,
+    "master_file_list.json"
+)
+
+PASSWORD_FILE = "database/passwd"
 
 
-def save_db(db):
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=2)
+
+# =====================================================
+# INITIALIZATION
+# =====================================================
+
+def initialize():
+
+    os.makedirs(
+        META_DIR,
+        exist_ok=True
+    )
+
+    os.makedirs(
+        CHUNK_DIR,
+        exist_ok=True
+    )
 
 
-# Create file
-def create_file(u, p, filename, content=""):
-    init()
-    db = load_db()
+    if not os.path.exists(MASTER_LIST):
 
-    if filename in db:
+        with open(
+            MASTER_LIST,
+            "w"
+        ) as file:
+
+            json.dump(
+                {},
+                file
+            )
+
+
+
+# =====================================================
+# AUTHENTICATION
+# =====================================================
+
+def authenticate(u, p):
+
+    return match_user(
+        u,
+        p,
+        PASSWORD_FILE
+    ) == 1
+
+
+
+# =====================================================
+# OWNER CHECK
+# =====================================================
+
+def check_file_owner(
+    u,
+    filename
+):
+
+    meta_path = os.path.join(
+        META_DIR,
+        filename + ".meta"
+    )
+
+
+    if not os.path.exists(meta_path):
+
+        return False
+
+
+    with open(
+        meta_path,
+        "rb"
+    ) as file:
+
+        meta = pickle.load(file)
+
+
+    return meta.get("owner") == u
+
+
+
+
+# =====================================================
+# HELPERS
+# =====================================================
+
+def generate_chunk_name():
+
+    chars = (
+        string.ascii_letters +
+        string.digits
+    )
+
+
+    return "".join(
+        random.choice(chars)
+        for _ in range(16)
+    )
+
+
+
+def load_master():
+
+    initialize()
+
+
+    with open(
+        MASTER_LIST,
+        "r"
+    ) as file:
+
+        return json.load(file)
+
+
+
+def save_master(data):
+
+    with open(
+        MASTER_LIST,
+        "w"
+    ) as file:
+
+        json.dump(
+            data,
+            file,
+            indent=4
+        )
+
+
+
+def split_chunks(data):
+
+    chunks = []
+
+
+    for index in range(
+        0,
+        len(data),
+        CHUNK_SIZE
+    ):
+
+        chunks.append(
+            data[index:index + CHUNK_SIZE]
+        )
+
+
+    if len(chunks) == 0:
+
+        chunks.append(
+            b""
+        )
+
+
+    if len(chunks[-1]) < CHUNK_SIZE:
+
+        chunks[-1] += (
+            b"0" *
+            (
+                CHUNK_SIZE -
+                len(chunks[-1])
+            )
+        )
+
+
+    return chunks
+
+
+
+
+# =====================================================
+# CREATE FILE
+# =====================================================
+
+def create_file(
+    u,
+    p,
+    filename
+):
+
+    if not authenticate(
+        u,
+        p
+    ):
+
         return -1
 
-    db[filename] = {
+
+    initialize()
+
+
+    meta_path = os.path.join(
+        META_DIR,
+        filename + ".meta"
+    )
+
+
+    if os.path.exists(meta_path):
+
+        return -1
+
+
+
+    meta = {
+
         "owner": u,
-        "plaintext": content,
-        "chunks": [],
-        "security": {},
-        "locked": False
+
+        "file_size": 0,
+
+        "number_of_chunks": 0,
+
+        "start_chunk": None,
+
+        "end_chunk": None
+
     }
 
-    save_db(db)
+
+
+    with open(
+        meta_path,
+        "wb"
+    ) as file:
+
+        pickle.dump(
+            meta,
+            file
+        )
+
+
+
+    master = load_master()
+
+
+
+    master[filename] = sha256_file(
+        meta_path
+    )
+
+
+
+    save_master(
+        master
+    )
+
+
     return 1
 
-
-# writting file
-def write_to_file(u, p, filename, position, content):
-    db = load_db()
-
-    if filename not in db:
-        return -1
-
-    db[filename]["plaintext"] = content
-    save_db(db)
-    return 1
-
-
+# =====================================================
 # ENCRYPT FILE
+# =====================================================
 
-def encrypt_file(u, p, filename):
-    init()
-    db = load_db()
+def encrypt_file(
+    u,
+    p,
+    filename
+):
 
-    if filename not in db:
+    if not authenticate(
+        u,
+        p
+    ):
+
         return -1
 
-    text = db[filename]["plaintext"]
 
-    if not text:
+
+    if not os.path.exists(filename):
+
         return -1
 
-    data = text.encode()
 
-    key = secrets.token_bytes(16)
-    iv = secrets.token_bytes(16)
 
-    encrypted = encrypt(data, key, iv)
+    initialize()
 
-    cname = f"{filename}.bin"
-    cpath = CHUNK_DIR + cname
 
-    with open(cpath, "wb") as f:
-        f.write(encrypted)
 
-    mac = hmac.new(key, encrypted, hashlib.sha256).hexdigest()
+    with open(
+        filename,
+        "rb"
+    ) as file:
 
-    db[filename]["chunks"] = [cname]
-    db[filename]["security"] = {
-        "key": key.hex(),
-        "iv": iv.hex(),
-        "hmac": mac
+        plaintext = file.read()
+
+
+
+    chunks = split_chunks(
+        plaintext
+    )
+
+
+    chunk_names = []
+
+
+    previous_chunk = None
+
+
+
+    for content in chunks:
+
+
+        chunk_name = generate_chunk_name()
+
+
+        key = generate_key()
+
+        iv = generate_iv()
+
+
+
+        encrypted = encrypt_aes_ctr(
+            content,
+            key,
+            iv
+        )
+
+
+
+        chunk = {
+
+            "name": chunk_name,
+
+            "key": key.hex(),
+
+            "iv": iv.hex(),
+
+            "hmac": generate_hmac(
+                encrypted,
+                key
+            ),
+
+            "next_chunk": None,
+
+            "content": encrypted.hex()
+
+        }
+
+
+
+        if previous_chunk:
+
+
+            previous_chunk["next_chunk"] = chunk_name
+
+
+            with open(
+                os.path.join(
+                    CHUNK_DIR,
+                    previous_chunk["name"]
+                ),
+                "wb"
+            ) as file:
+
+                pickle.dump(
+                    previous_chunk,
+                    file
+                )
+
+
+
+        with open(
+            os.path.join(
+                CHUNK_DIR,
+                chunk_name
+            ),
+            "wb"
+        ) as file:
+
+            pickle.dump(
+                chunk,
+                file
+            )
+
+
+
+        previous_chunk = chunk
+
+
+        chunk_names.append(
+            chunk_name
+        )
+
+
+
+    meta = {
+
+        "owner": u,
+
+        "file_size": len(plaintext),
+
+        "number_of_chunks": len(chunk_names),
+
+        "start_chunk": chunk_names[0],
+
+        "end_chunk": chunk_names[-1]
+
     }
 
-    db[filename]["locked"] = True
-
-    save_db(db)
-
-    return {
-        "status": "ENCRYPTED",
-        "key": key.hex(),
-        "iv": iv.hex()
-    }
 
 
-# DECRYPT 
-
-def _decrypt_internal(filename):
-    db = load_db()
-
-    
-    if not db[filename].get("chunks"):
-        return -1
-
-    cname = db[filename]["chunks"][0]
-    path = CHUNK_DIR + cname
-
-    if not os.path.exists(path):
-        return -1
-
-    encrypted = open(path, "rb").read()
-
-    sec = db[filename]["security"]
-
-    key = bytes.fromhex(sec["key"])
-    iv = bytes.fromhex(sec["iv"])
-
-    mac = hmac.new(key, encrypted, hashlib.sha256).hexdigest()
-
-    if mac != sec["hmac"]:
-        return -1
-
-    return decrypt(encrypted, key, iv).decode(errors="ignore")
+    meta_path = os.path.join(
+        META_DIR,
+        filename + ".meta"
+    )
 
 
-# READ FILE 
-def read_from_file(u, p, filename, position=0, length=None):
-    db = load_db()
 
-    if filename not in db:
-        return -1
+    with open(
+        meta_path,
+        "wb"
+    ) as file:
 
-
-    if not db[filename].get("chunks"):
-        return "ERROR: FILE NOT ENCRYPTED YET"
-
-    cname = db[filename]["chunks"][0]
-    path = CHUNK_DIR + cname
-
-    if not os.path.exists(path):
-        return "ERROR: FILE MISSING ON DISK"
-
-    encrypted = open(path, "rb").read()
-
-    if db[filename].get("locked", False):
-        preview = base64.b64encode(encrypted).decode()
-        return preview[:200] + " ... [ENCRYPTED]"
-
-    return _decrypt_internal(filename)
+        pickle.dump(
+            meta,
+            file
+        )
 
 
-# DECRYPT WITH KEY + IV
 
-def decrypt_file_with_prompt(u, p, filename, input_key, input_iv):
-    db = load_db()
-
-    if filename not in db:
-        return -1
-
-    sec = db[filename]["security"]
-
-    if input_key != sec["key"] or input_iv != sec["iv"]:
-        return "ERROR: INVALID KEY OR IV"
-
-    text = _decrypt_internal(filename)
-
-    if text == -1:
-        return -1
-
-    db[filename]["locked"] = False
-    save_db(db)
-
-    return text
+    master = load_master()
 
 
-# FILE SIZE
 
-def file_size(u, p, filename):
-    db = load_db()
-
-    if filename not in db:
-        return -1
-
-    return len(db[filename]["plaintext"])
+    master[filename] = sha256_file(
+        meta_path
+    )
 
 
-# LIST FILES
 
-def list_files():
-    db = load_db()
-    return list(db.keys())
+    save_master(
+        master
+    )
 
-
-# DELETE FILE
-
-def delete_file(u, p, filename):
-    db = load_db()
-
-    if filename not in db:
-        return -1
-
-    for c in db[filename]["chunks"]:
-        path = CHUNK_DIR + c
-        if os.path.exists(path):
-            os.remove(path)
-
-    del db[filename]
-    save_db(db)
 
     return 1
 
-# INTEGRITY CHECK
 
-def file_integrity_check(u, p, filename):
-    db = load_db()
 
-    if filename not in db:
+
+
+# =====================================================
+# DECRYPT FILE
+# =====================================================
+
+def decrypt_file(
+    u,
+    p,
+    filename,
+    pfilename
+):
+
+
+    if not authenticate(
+        u,
+        p
+    ):
+
         return -1
 
-    if not db[filename].get("chunks"):
+
+
+    if not check_file_owner(
+        u,
+        filename
+    ):
+
         return -1
 
-    cname = db[filename]["chunks"][0]
-    path = CHUNK_DIR + cname
 
-    if not os.path.exists(path):
+
+    size = file_size(
+        u,
+        p,
+        filename
+    )
+
+
+
+    if size == -1:
+
         return -1
 
-    encrypted = open(path, "rb").read()
-    sec = db[filename]["security"]
-
-    key = bytes.fromhex(sec["key"])
-    mac = hmac.new(key, encrypted, hashlib.sha256).hexdigest()
-
-    return 1 if mac == sec["hmac"] else -1
 
 
-# SYSTEM HEALTH
+    data = read_from_file(
+        u,
+        p,
+        filename,
+        0,
+        size
+    )
+
+
+
+    if data is None:
+
+        return -1
+
+
+
+    with open(
+        pfilename,
+        "wb"
+    ) as file:
+
+        file.write(
+            data
+        )
+
+
+    return 1
+
+
+
+
+
+# =====================================================
+# READ FILE
+# =====================================================
+
+def read_from_file(
+    u,
+    p,
+    filename,
+    position,
+    length
+):
+
+
+    if not authenticate(
+        u,
+        p
+    ):
+
+        return None
+
+
+
+    if not check_file_owner(
+        u,
+        filename
+    ):
+
+        return None
+
+
+
+    meta_path = os.path.join(
+        META_DIR,
+        filename + ".meta"
+    )
+
+
+
+    if not os.path.exists(meta_path):
+
+        return None
+
+
+
+    with open(
+        meta_path,
+        "rb"
+    ) as file:
+
+        meta = pickle.load(file)
+
+
+
+    result = b""
+
+
+    current = meta["start_chunk"]
+
+
+
+    while current:
+
+
+        with open(
+            os.path.join(
+                CHUNK_DIR,
+                current
+            ),
+            "rb"
+        ) as file:
+
+            chunk = pickle.load(file)
+
+
+
+        key = bytes.fromhex(
+            chunk["key"]
+        )
+
+
+        iv = bytes.fromhex(
+            chunk["iv"]
+        )
+
+
+        encrypted = bytes.fromhex(
+            chunk["content"]
+        )
+
+
+
+        if not verify_hmac(
+            encrypted,
+            key,
+            chunk["hmac"]
+        ):
+
+            return None
+
+
+
+        result += decrypt_aes_ctr(
+            encrypted,
+            key,
+            iv
+        )
+
+
+
+        current = chunk["next_chunk"]
+
+
+
+    result = result[:meta["file_size"]]
+
+
+
+    return result[
+        position:
+        position + length
+    ]
+
+
+
+
+
+# =====================================================
+# WRITE FILE
+# =====================================================
+
+def write_to_file(
+    u,
+    p,
+    filename,
+    position,
+    newcontent
+):
+
+
+    if not authenticate(
+        u,
+        p
+    ):
+
+        return -1
+
+
+
+    if not check_file_owner(
+        u,
+        filename
+    ):
+
+        return -1
+
+
+
+    current_size = file_size(
+        u,
+        p,
+        filename
+    )
+
+
+
+    if current_size == -1:
+
+        return -1
+
+
+
+    with open(
+        "__temp_original",
+        "wb"
+    ) as file:
+
+        file.write(
+            read_from_file(
+                u,
+                p,
+                filename,
+                0,
+                current_size
+            )
+        )
+
+
+
+    with open(
+        "__temp_original",
+        "rb"
+    ) as file:
+
+        data = file.read()
+
+
+
+    if position > len(data):
+
+        return -1
+
+
+
+    updated = (
+
+        data[:position]
+
+        +
+
+        newcontent
+
+        +
+
+        data[
+            position + len(newcontent):
+        ]
+
+    )
+
+
+
+    delete_file(
+        u,
+        p,
+        filename
+    )
+
+
+
+    with open(
+        "__temp_write",
+        "wb"
+    ) as file:
+
+        file.write(
+            updated
+        )
+
+
+
+    result = encrypt_file(
+        u,
+        p,
+        "__temp_write"
+    )
+
+    old_meta = os.path.join(
+        META_DIR,
+        "__temp_write.meta"
+    )
+
+    new_meta = os.path.join(
+        META_DIR,
+        filename + ".meta"
+    )
+
+    if os.path.exists(old_meta):
+        os.rename(
+            old_meta,
+            new_meta
+        )
+
+    master = load_master()
+
+    if "__temp_write" in master:
+        master[filename] = master.pop(
+            "__temp_write"
+        )
+
+        save_master(
+            master
+        )
+
+    if os.path.exists(
+            "__temp_original"
+    ):
+        os.remove(
+            "__temp_original"
+        )
+
+    if os.path.exists(
+            "__temp_write"
+    ):
+        os.remove(
+            "__temp_write"
+        )
+
+    return result
+
+
+# =====================================================
+# FILE SIZE
+# =====================================================
+
+def file_size(
+        u,
+        p,
+        filename
+):
+    if not authenticate(
+            u,
+            p
+    ):
+        return -1
+
+    if not check_file_owner(
+            u,
+            filename
+    ):
+        return -1
+
+    meta_path = os.path.join(
+        META_DIR,
+        filename + ".meta"
+    )
+
+    if not os.path.exists(meta_path):
+        return -1
+
+    with open(
+            meta_path,
+            "rb"
+    ) as file:
+
+        meta = pickle.load(file)
+
+    return meta["file_size"]
+
+
+# =====================================================
+# DELETE FILE
+# =====================================================
+
+def delete_file(
+        u,
+        p,
+        filename
+):
+    if not authenticate(
+            u,
+            p
+    ):
+        return -1
+
+    if not check_file_owner(
+            u,
+            filename
+    ):
+        return -1
+
+    meta_path = os.path.join(
+        META_DIR,
+        filename + ".meta"
+    )
+
+    if not os.path.exists(meta_path):
+        return -1
+
+    with open(
+            meta_path,
+            "rb"
+    ) as file:
+
+        meta = pickle.load(file)
+
+    current = meta["start_chunk"]
+
+    while current:
+
+        chunk_path = os.path.join(
+            CHUNK_DIR,
+            current
+        )
+
+        if not os.path.exists(chunk_path):
+            break
+
+        with open(
+                chunk_path,
+                "rb"
+        ) as file:
+
+            chunk = pickle.load(file)
+
+        next_chunk = chunk["next_chunk"]
+
+        os.remove(
+            chunk_path
+        )
+
+        current = next_chunk
+
+    os.remove(
+        meta_path
+    )
+
+    master = load_master()
+
+    if filename in master:
+        del master[filename]
+
+        save_master(
+            master
+        )
+
+    return 1
+
+
+# =====================================================
+# FILE INTEGRITY CHECK
+# =====================================================
+
+def file_integrity_check(
+        u,
+        p,
+        filename
+):
+    if not authenticate(
+            u,
+            p
+    ):
+        return -1
+
+    if not check_file_owner(
+            u,
+            filename
+    ):
+        return -1
+
+    meta_path = os.path.join(
+        META_DIR,
+        filename + ".meta"
+    )
+
+    if not os.path.exists(meta_path):
+        return -1
+
+    master = load_master()
+
+    current_hash = sha256_file(
+        meta_path
+    )
+
+    if master.get(filename) != current_hash:
+        return -1
+
+    return 1
+
+
+# =====================================================
+# SYSTEM HEALTH CHECK
+# =====================================================
+
 def system_health_check():
-    db = load_db()
-    return json.dumps(db, indent=2)
+    try:
+
+        initialize()
+
+        required = [
+
+            META_DIR,
+
+            CHUNK_DIR,
+
+            MASTER_LIST
+
+        ]
+
+        for item in required:
+
+            if not os.path.exists(item):
+                return None
+
+        return "SEFS SYSTEM HEALTHY"
+
+
+
+    except Exception:
+
+        return None
